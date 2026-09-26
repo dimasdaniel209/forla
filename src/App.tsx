@@ -49,6 +49,12 @@ export default function App() {
     return () => window.removeEventListener('popstate', handleUrlChange);
   }, []);
 
+  // Dynamically sync document title with config.landingTitle
+  useEffect(() => {
+    const webTitle = config.landingTitle || 'LD & LA Memories';
+    document.title = webTitle;
+  }, [config.landingTitle]);
+
   // Fetch cloud Firestore config and subscribe to real-time changes based on current environment
   useEffect(() => {
     const reconcileConfig = (incomingCloud: BirthdayConfig) => {

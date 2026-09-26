@@ -103,7 +103,7 @@ export const MemoriesHub: React.FC<Props> = ({
             <Heart className="w-4 h-4 text-rose-400 fill-rose-400" />
           </div>
           <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-            LD &amp; LA Memories
+            {config.landingTitle || 'LD & LA Memories'}
           </h1>
         </div>
 
