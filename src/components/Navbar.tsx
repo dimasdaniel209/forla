@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Volume2, VolumeX, Play, Pause, Settings, Sparkles, Music, Terminal, Rocket } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Volume2, VolumeX, Play, Pause, Settings, Sparkles, Music, Terminal, Rocket, Home } from 'lucide-react';
 import { ThemeConfig, ThemeId } from '../types';
 import { audioEngine } from '../utils/audio';
 import { AppEnvironment, getEnvironmentUrl } from '../utils/environment';
@@ -14,6 +14,7 @@ interface Props {
   isExpired?: boolean;
   environment: AppEnvironment;
   onOpenDeployModal?: () => void;
+  onBackToHub?: () => void;
 }
 
 export const Navbar: React.FC<Props> = ({
@@ -25,14 +26,20 @@ export const Navbar: React.FC<Props> = ({
   isExpired = false,
   environment,
   onOpenDeployModal,
+  onBackToHub,
 }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(audioEngine.getIsPlaying());
   const [showMusicPicker, setShowMusicPicker] = useState(false);
-  const [volume, setVolume] = useState(0.5);
+  const [volume, setVolume] = useState(audioEngine.getVolume());
+
+  useEffect(() => {
+    return audioEngine.subscribe((playing) => {
+      setIsPlaying(playing);
+    });
+  }, []);
 
   const handleToggleMusic = () => {
-    const playing = audioEngine.togglePlay(audioTrack, customAudioUrl);
-    setIsPlaying(playing);
+    audioEngine.togglePlay(audioTrack, customAudioUrl);
   };
 
   const handleTrackSelect = (track: 'musicbox' | 'acoustic' | 'party' | 'custom') => {
@@ -50,8 +57,18 @@ export const Navbar: React.FC<Props> = ({
 
   return (
     <header className="w-full p-4 sm:p-6 flex justify-between items-center z-30 relative">
-      {/* Left side: Environment badge if in Development mode */}
+      {/* Left side: Back to Hub button & Environment badge */}
       <div className="flex items-center gap-2">
+        {onBackToHub && (
+          <button
+            onClick={onBackToHub}
+            title="Kembali ke Menu Utama"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center bg-emerald-950/70 hover:bg-emerald-900/90 text-emerald-300 hover:text-white border border-emerald-500/35 backdrop-blur-md transition-all active:scale-95 cursor-pointer shadow-sm hover:shadow-emerald-500/20"
+          >
+            <Home className="w-4 h-4" />
+          </button>
+        )}
+
         {environment === 'development' ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40 shadow-sm backdrop-blur-md">
@@ -72,36 +89,36 @@ export const Navbar: React.FC<Props> = ({
             )}
           </div>
         ) : (
-          <div />
+          !onBackToHub && <div />
         )}
       </div>
 
       {/* Right Action Controls */}
       <div className="flex items-center gap-2">
-        {/* Audio Controls - Only shown when countdown is finished */}
-        {isExpired && (
-          <div className="relative">
-            <button
-              onClick={handleToggleMusic}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setShowMusicPicker(!showMusicPicker);
-              }}
-              title="Music"
-              className={`flex items-center gap-2 ${currentTheme.buttonBg} px-3.5 py-2 rounded-full border ${currentTheme.cardBorder} text-white text-xs font-medium shadow-md transition-all active:scale-95`}
-            >
+        {/* Audio Controls */}
+        <div className="relative">
+          <button
+            onClick={handleToggleMusic}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setShowMusicPicker(!showMusicPicker);
+            }}
+            title={isPlaying ? 'Jeda Musik (Klik kanan untuk ganti lagu)' : 'Putar Musik (Klik kanan untuk ganti lagu)'}
+            aria-label={isPlaying ? 'Jeda Musik' : 'Putar Musik'}
+            className={`w-9 h-9 rounded-full border flex items-center justify-center ${currentTheme.buttonBg} ${currentTheme.cardBorder} text-white shadow-md transition-all active:scale-95`}
+          >
               {isPlaying ? (
-                <>
+                <div className="flex items-center justify-center gap-1">
                   <Pause className="w-3.5 h-3.5 text-emerald-200" />
                   {/* Equalizer bars animation */}
-                  <div className="flex items-end gap-0.5 h-3">
+                  <div className="flex items-end gap-0.5 h-2.5">
                     <span className="w-0.5 h-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
                     <span className="w-0.5 h-2/3 bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
                     <span className="w-0.5 h-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
-                </>
+                </div>
               ) : (
-                <Play className="w-3.5 h-3.5 text-emerald-200" />
+                <Play className="w-4 h-4 text-emerald-200 fill-emerald-200 ml-0.5" />
               )}
             </button>
 
@@ -148,6 +165,17 @@ export const Navbar: React.FC<Props> = ({
                     <span>Party</span>
                     {audioTrack === 'party' && '✓'}
                   </button>
+                  {(customAudioUrl || audioTrack === 'custom') && (
+                    <button
+                      onClick={() => handleTrackSelect('custom')}
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs transition-colors flex items-center justify-between ${
+                        audioTrack === 'custom' ? 'bg-emerald-500 text-black font-bold' : 'hover:bg-emerald-950/60 text-emerald-200'
+                      }`}
+                    >
+                      <span>Custom Song</span>
+                      {audioTrack === 'custom' && '✓'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Volume Slider */}
@@ -167,7 +195,6 @@ export const Navbar: React.FC<Props> = ({
               </div>
             )}
           </div>
-        )}
 
         {/* Edit Configuration Button */}
         <button

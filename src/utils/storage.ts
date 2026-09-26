@@ -1,4 +1,4 @@
-import { BirthdayConfig } from '../types';
+import { BirthdayConfig, MemoryItem } from '../types';
 import { getCurrentEnvironment, AppEnvironment } from './environment';
 
 export function getStorageKey(env?: AppEnvironment): string {
@@ -14,6 +14,12 @@ export const DEFAULT_CONFIG: BirthdayConfig = {
   senderName: 'LD',
   age: 24,
   birthDate: '2026-09-24T00:00:00.000Z', // 24 September 2026 00:00:00
+  landingTitle: 'LD & LA Memories',
+  landingSubtitle: 'Every new moment just shows how much we belong together',
+  landingPin: '240926',
+  landingPinHint: 'Putar 6 angka tanggal kenangan kita ✨',
+  birthdayCoverImage: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=800&auto=format&fit=crop',
+  birthdayCoverCaption: 'Merayakan hari istimewamu dan setiap senyuman manis yang selalu mewarnai hari-hariku ❤️',
   passcode: '2512',
   passcodeHint: 'XXXXXX',
   specialMessage: 'Happy Birthday LA❤️! Semoga di usiamu yang ke-24 ini membawa sejuta kebahagiaan, senyuman manis, dan semua impian indahmu menjadi kenyataan. Terima kasih telah hadir dan mewarnai setiap detik dalam hidupku. ✨💖',
@@ -112,7 +118,26 @@ export function decodeConfigFromUrl(): BirthdayConfig | null {
   }
 }
 
+const SAFEGUARD_BACKUP_KEY = 'birthday_memories_safeguard_backup';
+
+export function getSafeguardMemories(): MemoryItem[] | null {
+  try {
+    const raw = localStorage.getItem(SAFEGUARD_BACKUP_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 4) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to read safeguard memories backup', e);
+  }
+  return null;
+}
+
 export function loadBirthdayConfig(env?: AppEnvironment): BirthdayConfig {
+  let loadedConfig: BirthdayConfig | null = null;
+
   try {
     // 1. Priority: URL Parameter (Shared link from sender)
     const fromUrl = decodeConfigFromUrl();
@@ -129,28 +154,72 @@ export function loadBirthdayConfig(env?: AppEnvironment): BirthdayConfig {
       if (parsed.wishText && parsed.wishText.includes('Semoga di usia ke-24')) {
         parsed.wishText = '';
       }
-      return { ...DEFAULT_CONFIG, ...parsed };
+      loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
     }
 
     // Fallback to older storage key if migrating
-    const legacySaved = localStorage.getItem('birthday_surprise_config_v1');
-    if (legacySaved) {
-      const parsed = JSON.parse(legacySaved);
-      if (parsed.wishText && parsed.wishText.includes('Semoga di usia ke-24')) {
-        parsed.wishText = '';
+    if (!loadedConfig) {
+      const legacySaved = localStorage.getItem('birthday_surprise_config_v1');
+      if (legacySaved) {
+        const parsed = JSON.parse(legacySaved);
+        if (parsed.wishText && parsed.wishText.includes('Semoga di usia ke-24')) {
+          parsed.wishText = '';
+        }
+        loadedConfig = { ...DEFAULT_CONFIG, ...parsed };
       }
-      return { ...DEFAULT_CONFIG, ...parsed };
     }
   } catch (err) {
     console.error('Failed to parse saved config:', err);
   }
-  return DEFAULT_CONFIG;
+
+  const result = loadedConfig ? { ...DEFAULT_CONFIG, ...loadedConfig } : { ...DEFAULT_CONFIG };
+
+  // SAFETY NET: If the current result has only default 4 photos, check if there are 15+ photos in backups!
+  if (!result.memories || result.memories.length <= 4) {
+    // 1. Check safeguard backup
+    const backupMemories = getSafeguardMemories();
+    if (backupMemories && backupMemories.length > (result.memories?.length || 0)) {
+      result.memories = backupMemories;
+    } else {
+      // 2. Check other environment keys
+      const otherKeys = [
+        'birthday_surprise_config_dev_v2',
+        'birthday_surprise_config_prod_v2',
+        'birthday_surprise_config_v1',
+      ];
+      for (const k of otherKeys) {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed.memories) && parsed.memories.length > 4) {
+              result.memories = parsed.memories;
+              // Save to safeguard
+              localStorage.setItem(SAFEGUARD_BACKUP_KEY, JSON.stringify(parsed.memories));
+              break;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  return result;
 }
 
 export function saveBirthdayConfig(config: BirthdayConfig, env?: AppEnvironment): void {
   try {
     const key = getStorageKey(env);
-    localStorage.setItem(key, JSON.stringify(config));
+    const withTimestamp = {
+      ...config,
+      updatedAt: config.updatedAt || new Date().toISOString(),
+    };
+    localStorage.setItem(key, JSON.stringify(withTimestamp));
+
+    // ALWAYS backup user's customized memories if more than default 4
+    if (Array.isArray(config.memories) && config.memories.length > 4) {
+      localStorage.setItem(SAFEGUARD_BACKUP_KEY, JSON.stringify(config.memories));
+    }
   } catch (err) {
     console.error('Failed to save config:', err);
   }

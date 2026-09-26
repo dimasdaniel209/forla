@@ -19,6 +19,8 @@ import { GiftBoxModal } from './components/GiftBoxModal';
 import { SpecialMessage } from './components/SpecialMessage';
 import { ConfigDrawer } from './components/ConfigDrawer';
 import { DeployModal } from './components/DeployModal';
+import { LandingPage } from './components/LandingPage';
+import { MemoriesHub } from './components/MemoriesHub';
 
 export default function App() {
   const [environment, setEnvironment] = useState<AppEnvironment>(getCurrentEnvironment);
@@ -29,6 +31,12 @@ export default function App() {
   const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
   const [adminPinInput, setAdminPinInput] = useState('');
   const [adminPinError, setAdminPinError] = useState(false);
+
+  // Landing Page 6-digit Unlock State & Sub-Menu routing
+  const [isLandingUnlocked, setIsLandingUnlocked] = useState<boolean>(() => {
+    return sessionStorage.getItem('ld_la_unlocked') === 'true';
+  });
+  const [activeSubMenu, setActiveSubMenu] = useState<'hub' | 'birthday'>('hub');
 
   // Sync environment if URL changes or popstate occurs
   useEffect(() => {
@@ -43,17 +51,41 @@ export default function App() {
 
   // Fetch cloud Firestore config and subscribe to real-time changes based on current environment
   useEffect(() => {
+    const reconcileConfig = (incomingCloud: BirthdayConfig) => {
+      setConfig((currentLocal) => {
+        const localCount = currentLocal.memories?.length || 0;
+        const cloudCount = incomingCloud.memories?.length || 0;
+
+        // If local has 15+ memories and incoming cloud only has 4 default memories:
+        // Protect local memories, keep them, and heal/sync Firestore!
+        if (localCount > cloudCount && cloudCount <= 4) {
+          console.warn(
+            `[Sync Protection] Local has ${localCount} memories while cloud has only ${cloudCount}. Protecting local memories and auto-syncing to Cloud.`
+          );
+          const healedConfig: BirthdayConfig = {
+            ...incomingCloud,
+            memories: currentLocal.memories,
+            updatedAt: new Date().toISOString(),
+          };
+          saveBirthdayConfig(healedConfig, environment);
+          saveCloudBirthdayConfig(healedConfig, environment);
+          return healedConfig;
+        }
+
+        saveBirthdayConfig(incomingCloud, environment);
+        return incomingCloud;
+      });
+    };
+
     // 1. Fetch initial cloud config for current environment (Prod vs Dev)
     getCloudBirthdayConfig(environment).then((cloudCfg) => {
       if (cloudCfg) {
-        setConfig(cloudCfg);
-        saveBirthdayConfig(cloudCfg, environment);
+        reconcileConfig(cloudCfg);
       } else {
         // Fallback to public .enc file if any
         loadEncryptedConfigFromPublic().then((encConfig) => {
           if (encConfig) {
-            setConfig(encConfig);
-            saveBirthdayConfig(encConfig, environment);
+            reconcileConfig(encConfig);
           }
         });
       }
@@ -62,8 +94,7 @@ export default function App() {
     // 2. Real-time subscription for current environment
     const unsubscribe = subscribeToCloudBirthdayConfig((updatedCloudCfg) => {
       if (updatedCloudCfg) {
-        setConfig(updatedCloudCfg);
-        saveBirthdayConfig(updatedCloudCfg, environment);
+        reconcileConfig(updatedCloudCfg);
       }
     }, environment);
 
@@ -117,91 +148,126 @@ export default function App() {
     setConfig((prev) => ({ ...prev, audioTrackId: track }));
   };
 
+  const handleUnlockLanding = () => {
+    sessionStorage.setItem('ld_la_unlocked', 'true');
+    setIsLandingUnlocked(true);
+    setActiveSubMenu('hub');
+  };
+
+  const handleLockLanding = () => {
+    sessionStorage.removeItem('ld_la_unlocked');
+    setIsLandingUnlocked(false);
+    setActiveSubMenu('hub');
+  };
+
   return (
-    <div
-      className={`w-full min-h-screen ${
-        isExpired ? theme.gradientBg : 'bg-black'
-      } flex flex-col justify-between font-sans overflow-x-hidden relative transition-colors duration-700 selection:bg-emerald-400 selection:text-black`}
-    >
-      {/* Background Lighting */}
-      {isExpired ? (
-        <BackgroundOrbs theme={theme} />
+    <>
+      {/* 1. GATE / LANDING PAGE (Locked state with 6-digit PIN) */}
+      {!isLandingUnlocked ? (
+        <LandingPage
+          config={config}
+          theme={theme}
+          onUnlock={handleUnlockLanding}
+          onOpenAdmin={handleOpenConfig}
+        />
+      ) : activeSubMenu === 'hub' ? (
+        /* 2. MEMORIES HUB (Sub-menu collection) */
+        <MemoriesHub
+          config={config}
+          theme={theme}
+          onSelectBirthday={() => setActiveSubMenu('birthday')}
+          onLock={handleLockLanding}
+          onOpenAdmin={handleOpenConfig}
+        />
       ) : (
-        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] sm:w-[700px] h-[300px] sm:h-[400px] bg-emerald-500/10 rounded-full blur-[130px]" />
+        /* 3. BIRTHDAY SURPRISE (Sub-menu item 1) */
+        <div
+          className={`w-full min-h-screen ${
+            isExpired ? theme.gradientBg : 'bg-black'
+          } flex flex-col justify-between font-sans overflow-x-hidden relative transition-colors duration-700 selection:bg-emerald-400 selection:text-black`}
+        >
+          {/* Background Lighting */}
+          {isExpired ? (
+            <BackgroundOrbs theme={theme} />
+          ) : (
+            <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] sm:w-[700px] h-[300px] sm:h-[400px] bg-emerald-500/10 rounded-full blur-[130px]" />
+            </div>
+          )}
+
+          {/* Interactive Floating Balloons - Only shown when countdown is finished */}
+          {isExpired && <Balloons />}
+
+          {/* Top Glass Navigation with Environment Support & Back to Hub */}
+          <Navbar
+            currentTheme={theme}
+            onOpenConfig={handleOpenConfig}
+            audioTrack={config.audioTrackId}
+            customAudioUrl={config.customAudioUrl}
+            onAudioTrackChange={handleAudioTrackChange}
+            isExpired={isExpired}
+            environment={environment}
+            onOpenDeployModal={() => setIsDeployModalOpen(true)}
+            onBackToHub={() => setActiveSubMenu('hub')}
+          />
+
+          {/* Main Container Content */}
+          <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-8 py-6 z-10 flex flex-col items-center justify-center space-y-8 sm:space-y-12">
+            {/* Layout container depending on expired state */}
+            {isExpired ? (
+              /* When countdown finishes, display Birthday Greeting & Passcode Card */
+              <div className="w-full max-w-3xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-700">
+                <SpecialMessage
+                  recipientName={config.recipientName}
+                  age={age}
+                  specialMessage={config.specialMessage}
+                  subMessage={config.subMessage}
+                  theme={theme}
+                  onOpenGiftBox={() => setIsGiftModalOpen(true)}
+                />
+
+                <div className="w-full max-w-md mx-auto">
+                  <GiftBoxTrigger
+                    theme={theme}
+                    correctPasscode={config.passcode}
+                    passcodeHint={config.passcodeHint}
+                    onOpenGiftBox={() => setIsGiftModalOpen(true)}
+                  />
+                </div>
+              </div>
+            ) : (
+              /* Single Centered Clean Countdown Timer before Birthday Time */
+              <div className="w-full max-w-2xl mx-auto animate-in fade-in duration-500">
+                <CountdownTimer
+                  targetDateStr={config.birthDate}
+                  recipientName={config.recipientName}
+                  age={age}
+                  theme={theme}
+                  onTimeReached={() => {
+                    setIsExpired(true);
+                  }}
+                />
+              </div>
+            )}
+          </main>
+
+          {/* Footer Signature - Only shown when countdown is finished */}
+          {isExpired && (
+            <footer className="w-full p-6 text-center z-10">
+              <span className="text-white/60 text-xs font-medium tracking-widest uppercase">
+                Made with Love by {config.senderName}
+              </span>
+            </footer>
+          )}
+
+          {/* Fullscreen Gift Box Modal */}
+          <GiftBoxModal
+            config={config}
+            isOpen={isGiftModalOpen}
+            onClose={() => setIsGiftModalOpen(false)}
+          />
         </div>
       )}
-
-      {/* Interactive Floating Balloons - Only shown when countdown is finished */}
-      {isExpired && <Balloons />}
-
-      {/* Top Glass Navigation with Environment Support */}
-      <Navbar
-        currentTheme={theme}
-        onOpenConfig={handleOpenConfig}
-        audioTrack={config.audioTrackId}
-        customAudioUrl={config.customAudioUrl}
-        onAudioTrackChange={handleAudioTrackChange}
-        isExpired={isExpired}
-        environment={environment}
-        onOpenDeployModal={() => setIsDeployModalOpen(true)}
-      />
-
-      {/* Main Container Content */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-8 py-6 z-10 flex flex-col items-center justify-center space-y-8 sm:space-y-12">
-        {/* Layout container depending on expired state */}
-        {isExpired ? (
-          /* When countdown finishes, display Birthday Greeting & Passcode Card */
-          <div className="w-full max-w-3xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-700">
-            <SpecialMessage
-              recipientName={config.recipientName}
-              age={age}
-              specialMessage={config.specialMessage}
-              subMessage={config.subMessage}
-              theme={theme}
-              onOpenGiftBox={() => setIsGiftModalOpen(true)}
-            />
-
-            <div className="w-full max-w-md mx-auto">
-              <GiftBoxTrigger
-                theme={theme}
-                correctPasscode={config.passcode}
-                passcodeHint={config.passcodeHint}
-                onOpenGiftBox={() => setIsGiftModalOpen(true)}
-              />
-            </div>
-          </div>
-        ) : (
-          /* Single Centered Clean Countdown Timer before Birthday Time */
-          <div className="w-full max-w-2xl mx-auto animate-in fade-in duration-500">
-            <CountdownTimer
-              targetDateStr={config.birthDate}
-              recipientName={config.recipientName}
-              age={age}
-              theme={theme}
-              onTimeReached={() => {
-                setIsExpired(true);
-              }}
-            />
-          </div>
-        )}
-      </main>
-
-      {/* Footer Signature - Only shown when countdown is finished */}
-      {isExpired && (
-        <footer className="w-full p-6 text-center z-10">
-          <span className="text-white/60 text-xs font-medium tracking-widest uppercase">
-            Made with Love by {config.senderName}
-          </span>
-        </footer>
-      )}
-
-      {/* Fullscreen Gift Box Modal */}
-      <GiftBoxModal
-        config={config}
-        isOpen={isGiftModalOpen}
-        onClose={() => setIsGiftModalOpen(false)}
-      />
 
       {/* Admin Verification PIN Modal */}
       {isAdminPinModalOpen && (
@@ -262,7 +328,11 @@ export default function App() {
         onClose={() => setIsConfigDrawerOpen(false)}
         onSave={(updatedConfig) => setConfig(updatedConfig)}
         environment={environment}
-        onOpenDeployModal={() => {
+        onOpenDeployModal={(currentFormData) => {
+          if (currentFormData) {
+            setConfig(currentFormData);
+            saveBirthdayConfig(currentFormData, environment);
+          }
           setIsConfigDrawerOpen(false);
           setIsDeployModalOpen(true);
         }}
@@ -272,13 +342,11 @@ export default function App() {
       <DeployModal
         isOpen={isDeployModalOpen}
         onClose={() => setIsDeployModalOpen(false)}
+        config={config}
         onDeploySuccess={(deployedConfig) => {
-          // If in production environment, reflect immediately
-          if (environment === 'production') {
-            setConfig(deployedConfig);
-          }
+          setConfig(deployedConfig);
         }}
       />
-    </div>
+    </>
   );
 }

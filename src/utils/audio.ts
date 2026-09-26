@@ -10,6 +10,19 @@ class BirthdayAudioEngine {
   private ytIframeEl: HTMLIFrameElement | null = null;
   private timerId: number | null = null;
   private volume: number = 0.5;
+  private listeners: Set<(isPlaying: boolean) => void> = new Set();
+
+  public subscribe(fn: (isPlaying: boolean) => void): () => void {
+    this.listeners.add(fn);
+    fn(this.isPlaying);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  }
+
+  private notify() {
+    this.listeners.forEach((fn) => fn(this.isPlaying));
+  }
 
   private initCtx() {
     if (!this.ctx) {
@@ -41,6 +54,7 @@ class BirthdayAudioEngine {
     this.stop();
     this.currentTrack = track;
     this.isPlaying = true;
+    this.notify();
 
     if (track === 'custom' && customUrl) {
       this.playCustomAudio(customUrl);
@@ -104,6 +118,7 @@ class BirthdayAudioEngine {
       this.timerId = null;
     }
     this.stopCustomMedia();
+    this.notify();
   }
 
   public togglePlay(track: 'musicbox' | 'acoustic' | 'party' | 'custom', customUrl?: string): boolean {

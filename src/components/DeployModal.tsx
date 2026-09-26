@@ -6,12 +6,14 @@ import { BirthdayConfig } from '../types';
 interface DeployModalProps {
   isOpen: boolean;
   onClose: () => void;
+  config?: BirthdayConfig;
   onDeploySuccess?: (deployedConfig: BirthdayConfig) => void;
 }
 
 export const DeployModal: React.FC<DeployModalProps> = ({
   isOpen,
   onClose,
+  config,
   onDeploySuccess,
 }) => {
   const [isDeploying, setIsDeploying] = useState(false);
@@ -23,7 +25,7 @@ export const DeployModal: React.FC<DeployModalProps> = ({
     setIsDeploying(true);
     setResult(null);
 
-    const res = await deployDevToProduction();
+    const res = await deployDevToProduction(config);
     setIsDeploying(false);
     setResult(res);
 
@@ -63,15 +65,25 @@ export const DeployModal: React.FC<DeployModalProps> = ({
         <div className="bg-emerald-950/60 border border-emerald-500/30 rounded-2xl p-4 text-xs space-y-2.5">
           <div className="flex items-center justify-between font-mono pb-2 border-b border-emerald-500/20">
             <span className="text-amber-300 font-bold flex items-center gap-1.5">
-              <span>●</span> DEV (settings/birthday_config_dev)
+              <span>●</span> DEV (Sumber)
             </span>
             <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-emerald-300 font-bold flex items-center gap-1.5">
-              <span>●</span> PROD (settings/birthday_config_production)
+              <span>●</span> PROD (Tujuan Live)
             </span>
           </div>
+
+          {config && (
+            <div className="bg-emerald-900/40 p-2.5 rounded-xl border border-emerald-400/30 flex items-center justify-between text-[11px]">
+              <span className="text-emerald-200">Data yang siap dikirim:</span>
+              <span className="font-bold text-amber-300">
+                {config.memories?.length || 0} Foto Kenangan &amp; Momen
+              </span>
+            </div>
+          )}
+
           <p className="text-emerald-200/80 leading-relaxed">
-            Aksi ini akan menyalin seluruh pengaturan, pesan kenangan, voucher, dan kode akses dari ruang <b>Development</b> langsung ke <b>Production</b> yang dilihat oleh pengunjung utama.
+            Aksi ini akan menyalin seluruh {config?.memories?.length || ''} foto kenangan, musik, pesan cinta, dan kode akses langsung ke database <b>Production</b> yang dibuka oleh pacar/tamu.
           </p>
         </div>
 

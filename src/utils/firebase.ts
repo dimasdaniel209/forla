@@ -136,33 +136,52 @@ export function subscribeToCloudBirthdayConfig(
  * DEPLOY OPERATION: Overwrite Production database with Development data
  * Returns { success: boolean, message: string }
  */
-export async function deployDevToProduction(): Promise<{ success: boolean; message: string; config?: BirthdayConfig }> {
+export async function deployDevToProduction(
+  activeDevConfig?: BirthdayConfig
+): Promise<{ success: boolean; message: string; config?: BirthdayConfig }> {
   try {
-    // 1. Fetch current development config
-    const devDocRef = doc(db, 'settings', DOC_DEVELOPMENT);
-    const devSnap = await getDoc(devDocRef);
+    let devData: BirthdayConfig | null = activeDevConfig || null;
 
-    let devData: BirthdayConfig;
-    if (devSnap.exists()) {
-      devData = { ...DEFAULT_CONFIG, ...(devSnap.data() as Partial<BirthdayConfig>) };
-    } else {
-      // If dev hasn't been saved yet, fetch current active dev state or fallback
-      const fallback = await getCloudBirthdayConfig('development');
-      if (fallback) {
-        devData = fallback;
+    if (!devData) {
+      // 1. Fetch current development config
+      const devDocRef = doc(db, 'settings', DOC_DEVELOPMENT);
+      const devSnap = await getDoc(devDocRef);
+
+      if (devSnap.exists()) {
+        devData = { ...DEFAULT_CONFIG, ...(devSnap.data() as Partial<BirthdayConfig>) };
       } else {
-        return {
-          success: false,
-          message: 'Data development belum ditemukan untuk di-deploy.',
-        };
+        // If dev hasn't been saved yet, fetch current active dev state or fallback
+        const fallback = await getCloudBirthdayConfig('development');
+        if (fallback) {
+          devData = fallback;
+        } else {
+          return {
+            success: false,
+            message: 'Data development belum ditemukan untuk di-deploy.',
+          };
+        }
       }
     }
 
-    // 2. Overwrite Production Document
-    const prodDocRef = doc(db, 'settings', DOC_PRODUCTION);
     const payload = JSON.parse(JSON.stringify(devData));
     const deployTimestamp = new Date().toISOString();
 
+    // 1. Update development doc in cloud to ensure sync
+    try {
+      const devDocRef = doc(db, 'settings', DOC_DEVELOPMENT);
+      await setDoc(
+        devDocRef,
+        {
+          ...payload,
+          environment: 'development',
+          updatedAt: deployTimestamp,
+        },
+        { merge: true }
+      );
+    } catch (_) {}
+
+    // 2. Overwrite Production Document in cloud
+    const prodDocRef = doc(db, 'settings', DOC_PRODUCTION);
     await setDoc(
       prodDocRef,
       {
@@ -190,9 +209,20 @@ export async function deployDevToProduction(): Promise<{ success: boolean; messa
       // non-critical
     }
 
+    // 3. Update localStorage for BOTH production and development
+    try {
+      localStorage.setItem('birthday_surprise_config_prod_v2', JSON.stringify({ ...payload, updatedAt: deployTimestamp }));
+      localStorage.setItem('birthday_surprise_config_dev_v2', JSON.stringify({ ...payload, updatedAt: deployTimestamp }));
+      if (Array.isArray(payload.memories) && payload.memories.length > 0) {
+        localStorage.setItem('birthday_memories_safeguard_backup', JSON.stringify(payload.memories));
+      }
+    } catch (_) {}
+
+    const memoryCount = payload.memories?.length || 0;
+
     return {
       success: true,
-      message: 'Berhasil menimpa data Production dengan data Development! 🎉',
+      message: `Berhasil menimpa data Production dengan ${memoryCount} foto kenangan dan pesan terbaru! 🎉`,
       config: devData,
     };
   } catch (err: any) {

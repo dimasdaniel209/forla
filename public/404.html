@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+      // Single Page App redirect for GitHub Pages
+      // Example: https://dimasdaniel209.github.io/forla/dev2409 -> https://dimasdaniel209.github.io/forla/?dev2409
+      var l = window.location;
+      var pathParts = l.pathname.split('/').filter(Boolean);
+      // If repo name is the first segment (e.g., 'forla')
+      var repo = pathParts.length > 0 ? pathParts[0] : '';
+      var subPath = pathParts.slice(1).join('/');
+      
+      var target = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + repo + '/';
+      var query = subPath ? '?' + subPath : '';
+      if (l.search) {
+        query += (query ? '&' : '?') + l.search.slice(1);
+      }
+      l.replace(target + query + l.hash);
+    </script>
+  </head>
+  <body>
+  </body>
+</html>

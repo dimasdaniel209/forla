@@ -150,7 +150,9 @@ export async function downloadEncryptedConfigFile(
  */
 export async function loadEncryptedConfigFromPublic(): Promise<BirthdayConfig | null> {
   try {
-    const response = await fetch('/birthday-config.enc');
+    const baseUrl = (import.meta as any).env?.BASE_URL || '/';
+    const filePath = baseUrl.endsWith('/') ? `${baseUrl}birthday-config.enc` : `${baseUrl}/birthday-config.enc`;
+    const response = await fetch(filePath);
     if (!response.ok) return null;
     const text = await response.text();
     if (!text || text.startsWith('<!DOCTYPE') || text.startsWith('<html') || text.trim().length < 20) {

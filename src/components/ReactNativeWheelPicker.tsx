@@ -149,7 +149,7 @@ export const WheelPickerColumn: React.FC<WheelPickerColumnProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      className="relative flex-1 max-w-[56px] h-[126px] flex flex-col items-center justify-center select-none cursor-ns-resize group"
+      className="relative flex-1 min-w-[28px] sm:min-w-[34px] max-w-[54px] h-[126px] flex flex-col items-center justify-center select-none cursor-ns-resize group"
       style={{ perspective: '320px' }}
     >
       {/* React Native Wheel Picker Center Active Selection Band */}
@@ -244,7 +244,7 @@ export const WheelPickerColumn: React.FC<WheelPickerColumnProps> = ({
                 opacity: { duration: 0.16 },
                 scale: { duration: 0.16 },
               }}
-              className="w-full h-full flex items-center justify-center text-white font-mono text-2xl font-black tracking-widest absolute inset-0"
+              className="w-full h-full flex items-center justify-center text-white font-mono text-xl sm:text-2xl font-black tracking-wider sm:tracking-widest absolute inset-0"
             >
               {options[currentIndex]}
             </motion.div>
@@ -321,7 +321,7 @@ export const ReactNativeWheelPicker: React.FC<ReactNativeWheelPickerProps> = ({
 }) => {
   return (
     <div className="w-full flex items-center justify-center py-1">
-      <div className="bg-white/10 backdrop-blur-2xl px-3 py-1.5 rounded-2xl border border-white/25 flex items-center justify-center gap-1.5 w-full max-w-[260px]">
+      <div className="bg-white/10 backdrop-blur-2xl px-2.5 sm:px-3.5 py-1.5 rounded-2xl border border-white/25 flex items-center justify-center gap-1 sm:gap-1.5 w-full max-w-[360px] shadow-lg shadow-black/30">
         {values.map((val, idx) => (
           <React.Fragment key={idx}>
             <WheelPickerColumn
